@@ -186,6 +186,8 @@ A GPS UART passthrough has been added on UART2: pins PA2 (TX) and PA3 (RX) can b
 
 This link now has its own baudrate, 115200 by default, set in the `GPS > Comm` menu: use this for your serial adapter, and not the GPS baudrate. For heavy traffic such as u-center, set it to the same value as the GPS baudrate and reboot. It also carries monitoring and control sentences, see [the protocol](doc/PROTOCOL.md).
 
+An ESP32-C3 on this link gives the GPSDO a web interface on your network: see [esp32-web](esp32-web/README.md).
+
 ![GPS Passthrough](https://github.com/fredzo/gpsdo-fw/blob/main/doc/gps-passthrough.jpg?raw=true)
 
 These two pins and ground can be routed to an external header on the backside of the device, and then plugging in a serial to USB converter when needed.

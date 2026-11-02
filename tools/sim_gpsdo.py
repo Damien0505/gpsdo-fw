@@ -85,6 +85,7 @@ class SimGpsdo:
         self.saved_pwm = 38000
         self.sync_count = 0
         self.ppb_error = 400.0      # Settles over time
+        self.wander = 0.0
         self.samples = 0
         self.rx = bytearray()
         self.forwarded = bytearray()  # What a real GPSDO would pass to the GPS
@@ -115,9 +116,11 @@ class SimGpsdo:
         if adjusting:
             self.samples = min(self.samples + 1, 128)
             self.ppb_error *= 0.985
+            # An oscillator wanders a little, even when locked
+            self.wander = 0.995 * self.wander + self.random.gauss(0, 0.012)
         error = self.ppb_error * 0.07 + self.random.gauss(0, 0.6)     # Hz at 70 MHz
         error_hz = round(error)
-        mean = round(self.ppb_error * 100) if self.samples else 65535
+        mean = round((self.ppb_error + self.wander) * 100) if self.samples else 65535
         inst = int(error_hz * 1e9 * 100 / 70000000)
         correction = -round(error / 3) if adjusting else 0
         self.pwm = max(0, min(65535, self.pwm + correction))

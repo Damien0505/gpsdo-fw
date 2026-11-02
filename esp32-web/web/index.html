@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>GPSDO</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="vendor/uPlot.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1 class="brand">GPSDO</h1>
+  <ul class="lamps" aria-label="Status">
+    <li class="lamp" id="lamp-gps"><i></i><span>GPS</span></li>
+    <li class="lamp" id="lamp-ppb"><i></i><span>PPB</span></li>
+    <li class="lamp" id="lamp-warm" hidden><i></i><span>Warming up</span></li>
+  </ul>
+  <p class="clock" id="clock" title="Time from the GPS, UTC">--:--:-- UTC</p>
+</header>
+
+<p class="alert" id="alert" role="status" hidden></p>
+
+<nav class="tabs" role="tablist" aria-label="Sections">
+  <button role="tab" data-tab="dashboard" aria-selected="true">Dashboard</button>
+  <button role="tab" data-tab="trend" aria-selected="false">Trend</button>
+  <button role="tab" data-tab="gps" aria-selected="false">GPS</button>
+  <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
+  <button role="tab" data-tab="console" aria-selected="false">Console</button>
+</nav>
+
+<main>
+<section id="dashboard" role="tabpanel">
+  <div class="dash">
+    <div class="hero">
+      <h2 class="hero-label">Mean error over 128 s</h2>
+      <p class="readout"><output id="ppb">--</output> <span class="unit">ppb</span></p>
+      <div class="meter" id="meter" role="img" aria-label="Frequency error meter">
+        <div class="meter-band" id="meter-band"></div>
+        <div class="meter-scale" id="meter-scale"></div>
+        <div class="needle" id="needle" hidden></div>
+      </div>
+      <p class="verdict" id="verdict">Waiting for the GPSDO.</p>
+      <div class="actions">
+        <button class="ghost" id="save-pwm">Save PWM</button>
+        <button class="ghost" id="force-sync">Force PPS sync</button>
+      </div>
+    </div>
+    <div class="readings">
+      <dl class="list">
+        <div><dt>Frequency</dt><dd id="r-freq">--</dd></div>
+        <div><dt>Error</dt><dd id="r-error">--</dd></div>
+        <div><dt>Instant error</dt><dd id="r-inst">--</dd></div>
+        <div><dt>Correction</dt><dd id="r-correction">--</dd></div>
+        <div><dt>PWM</dt><dd id="r-pwm">--</dd></div>
+      </dl>
+      <dl class="list">
+        <div><dt>PPS shift</dt><dd id="r-shift">--</dd></div>
+        <div><dt>PPS shift time</dt><dd id="r-shift-ms">--</dd></div>
+        <div><dt>PPS syncs</dt><dd id="r-syncs">--</dd></div>
+        <div><dt>Satellites</dt><dd id="r-sats">--</dd></div>
+        <div><dt>GPSDO uptime</dt><dd id="r-uptime">--</dd></div>
+      </dl>
+      <dl class="list quiet">
+        <div><dt>Firmware</dt><dd id="r-fw">--</dd></div>
+        <div><dt>Serial link</dt><dd id="r-link">--</dd></div>
+        <div><dt>Damaged sentences</dt><dd id="r-bad">--</dd></div>
+        <div><dt>WiFi</dt><dd id="r-wifi">--</dd></div>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section id="trend" role="tabpanel" hidden>
+  <div class="trend-head">
+    <div>
+      <h2>Mean error, in ppb, against UTC</h2>
+      <p class="hover-readout" id="trend-readout">&nbsp;</p>
+    </div>
+    <div class="segmented" role="group" aria-label="Time range">
+      <button data-range="1h" aria-pressed="true">1 hour</button>
+      <button data-range="24h" aria-pressed="false">24 hours</button>
+    </div>
+  </div>
+  <div class="chart" id="chart"></div>
+  <p class="note" id="trend-note">History restarts when the ESP32 restarts. Drag across the chart to zoom, double-click to reset.</p>
+  <dl class="list stats" id="trend-stats">
+    <div><dt>Lowest</dt><dd id="t-min">--</dd></div>
+    <div><dt>Average</dt><dd id="t-mean">--</dd></div>
+    <div><dt>Highest</dt><dd id="t-max">--</dd></div>
+  </dl>
+</section>
+
+<section id="gps" role="tabpanel" hidden>
+  <div class="gps-layout">
+    <dl class="list">
+      <div><dt>Date and time, UTC</dt><dd id="g-time">--</dd></div>
+      <div><dt>Fix</dt><dd id="g-fix">--</dd></div>
+      <div><dt>Latitude</dt><dd id="g-lat">--</dd></div>
+      <div><dt>Longitude</dt><dd id="g-lon">--</dd></div>
+      <div><dt>Locator</dt><dd id="g-loc">--</dd></div>
+      <div><dt>Altitude</dt><dd id="g-alt">--</dd></div>
+      <div><dt>Geoid separation</dt><dd id="g-geoid">--</dd></div>
+      <div><dt>HDOP</dt><dd id="g-hdop">--</dd></div>
+      <div><dt>Satellites used</dt><dd id="g-used">--</dd></div>
+      <div><dt>Satellites in view</dt><dd id="g-view">--</dd></div>
+    </dl>
+    <div class="sat-wrap">
+      <table class="sats">
+        <thead><tr><th scope="col">System</th><th scope="col" class="num">PRN</th><th scope="col" class="num">Elevation</th><th scope="col" class="num">Azimuth</th><th scope="col" class="snr-col">Signal, dB-Hz</th><th scope="col">Used</th></tr></thead>
+        <tbody id="sat-rows"></tbody>
+      </table>
+      <p class="note" id="sat-empty">No satellites reported yet. Check the antenna if this lasts more than a few minutes.</p>
+    </div>
+  </div>
+</section>
+
+<section id="settings" role="tabpanel" hidden>
+  <p class="note" id="settings-wait">Waiting for the settings from the GPSDO.</p>
+  <form id="settings-form" autocomplete="off" hidden></form>
+  <p class="note links">Network and password: <a href="/setup">device setup</a>. ESP32 firmware and web interface: <a href="/update">update</a>.</p>
+  <div class="applybar" id="applybar" hidden>
+    <span id="apply-summary"></span>
+    <span class="applybar-buttons">
+      <button type="button" class="ghost" id="discard">Discard</button>
+      <button type="button" class="solid" id="apply">Apply</button>
+    </span>
+  </div>
+</section>
+
+<section id="console" role="tabpanel" hidden>
+  <div class="console-head">
+    <p class="note">The last 200 lines on the serial link. Lines starting with &gt; were sent to the GPSDO.</p>
+    <label class="check"><input type="checkbox" id="console-follow" checked> Follow new lines</label>
+  </div>
+  <pre class="console" id="console-text" tabindex="0"></pre>
+</section>
+</main>
+
+<dialog id="confirm">
+  <form method="dialog">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-text"></p>
+    <div class="dialog-buttons">
+      <button class="ghost" value="cancel">Cancel</button>
+      <button class="solid" id="confirm-ok" value="ok"></button>
+    </div>
+  </form>
+</dialog>
+<p class="toast" id="toast" role="status" hidden></p>
+
+<script src="vendor/uPlot.iife.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

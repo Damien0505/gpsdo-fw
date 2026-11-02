@@ -521,14 +521,8 @@ void begin(Gpsdo& gpsdo_ref, DeviceSettings& settings_ref)
         if (!settings->provisioned()) {
             redirectToSetup(request);
         } else if (LittleFS.exists("/index.html.gz") || LittleFS.exists("/index.html")) {
-            AsyncWebServerResponse* response = LittleFS.exists("/index.html.gz")
-                ? request->beginResponse(LittleFS, "/index.html.gz", "text/html")
-                : request->beginResponse(LittleFS, "/index.html", "text/html");
-            if (LittleFS.exists("/index.html.gz")) {
-                response->addHeader("Content-Encoding", "gzip");
-            }
-            response->addHeader("Cache-Control", "no-cache");
-            request->send(response);
+            // The server finds the .gz version by itself and sets the encoding
+            request->send(LittleFS, "/index.html", "text/html");
         } else {
             request->send(200, "text/html", FPSTR(pages::NO_UI));
         }
