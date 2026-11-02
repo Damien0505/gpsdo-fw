@@ -166,42 +166,41 @@ int	gps_configure_module_uart(uint32_t baudrate)
     return	0;
 }
 
+static void gps_init_uart(UART_HandleTypeDef* huart, USART_TypeDef* instance, uint32_t baudrate)
+{
+    huart->Instance = instance;
+    huart->Init.BaudRate = baudrate;
+    huart->Init.WordLength = UART_WORDLENGTH_8B;
+    huart->Init.StopBits = UART_STOPBITS_1;
+    huart->Init.Parity = UART_PARITY_NONE;
+    huart->Init.Mode = UART_MODE_TX_RX;
+    huart->Init.HwFlowCtl = UART_HWCONTROL_NONE;
+    huart->Init.OverSampling = UART_OVERSAMPLING_16;
+    if (HAL_UART_Init(huart) != HAL_OK)
+    {
+      Error_Handler();
+    }
+}
+
+// Only touches the GPS UART (USART3): the external link (USART2) has its own baudrate.
+// Do not restart comm RX from here: it is still running, so HAL_UART_Receive_DMA() would return
+// HAL_BUSY and Error_Handler() resets the MCU.
 void gps_reconfigure_uart(uint32_t baudrate)
 {
-    HAL_UART_DeInit(&huart2);
     HAL_UART_DeInit(&huart3);
     // Wait for buffers to be consumed
     HAL_Delay(50);
-
-    huart2.Instance = USART2;
-    huart2.Init.BaudRate = baudrate;
-    huart2.Init.WordLength = UART_WORDLENGTH_8B;
-    huart2.Init.StopBits = UART_STOPBITS_1;
-    huart2.Init.Parity = UART_PARITY_NONE;
-    huart2.Init.Mode = UART_MODE_TX_RX;
-    huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-    huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-    if (HAL_UART_Init(&huart2) != HAL_OK)
-    {
-      Error_Handler();
-    }
-
-    huart3.Instance = USART3;
-    huart3.Init.BaudRate = baudrate;
-    huart3.Init.WordLength = UART_WORDLENGTH_8B;
-    huart3.Init.StopBits = UART_STOPBITS_1;
-    huart3.Init.Parity = UART_PARITY_NONE;
-    huart3.Init.Mode = UART_MODE_TX_RX;
-    huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-    huart3.Init.OverSampling = UART_OVERSAMPLING_16;
-    if (HAL_UART_Init(&huart3) != HAL_OK)
-    {
-      Error_Handler();
-    }
-    // Wait Uarts to init
+    gps_init_uart(&huart3, USART3, baudrate);
+    // Wait Uart to init
     HAL_Delay(50);
     gps_start_gps_rx();
-    gps_start_comm_rx();
+}
+
+// Called once at boot, before gps_start_it()
+void gps_init_comm_uart(uint32_t baudrate)
+{
+    HAL_UART_DeInit(&huart2);
+    gps_init_uart(&huart2, USART2, baudrate);
 }
 
 void gps_save_config()

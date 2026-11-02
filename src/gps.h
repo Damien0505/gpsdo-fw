@@ -5,6 +5,8 @@
 #include <stdbool.h>
 
 #define GPS_DEFAULT_BAUDRATE    9600
+// Default baudrate of the external serial link (USART2), independent from the GPS module one
+#define COMM_DEFAULT_BAUDRATE   115200
 
 extern char     gps_time[];
 extern char     gps_date[];
@@ -39,6 +41,7 @@ void gps_read();
 
 int	 gps_configure_module_uart(uint32_t baudrate);
 void gps_reconfigure_uart(uint32_t baudrate);
+void gps_init_comm_uart(uint32_t baudrate);
 void gps_save_config();
 
 #endif

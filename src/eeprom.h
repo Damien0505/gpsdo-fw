@@ -28,6 +28,8 @@ typedef struct
     uint8_t  correction_algorithm;
     uint32_t correction_factor;
     uint32_t warmup_time_seconds;
+    /* New fields must be appended here so that existing units read 0xFF and fall back to defaults */
+    uint32_t comm_baudrate;
 } ee_storage_t;
 
 extern ee_storage_t ee_storage;

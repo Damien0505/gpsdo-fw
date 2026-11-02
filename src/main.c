@@ -132,6 +132,13 @@ void gpsdo(void)
     warmup_time_seconds = ee_storage.warmup_time_seconds;
 
 
+    // External link baudrate: independent from the GPS one, takes effect at boot only
+    if (!settings_is_valid_baudrate(ee_storage.comm_baudrate)) {
+        ee_storage.comm_baudrate = COMM_DEFAULT_BAUDRATE;
+    }
+    menu_set_comm_baudrate(ee_storage.comm_baudrate);
+    gps_init_comm_uart(ee_storage.comm_baudrate);
+
     gps_start_it();
 
     menu_set_gps_baudrate(ee_storage.gps_baudrate);

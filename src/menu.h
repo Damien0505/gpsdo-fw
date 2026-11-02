@@ -29,11 +29,14 @@ extern uint32_t trend_v_scale;
 extern uint32_t trend_h_scale; 
 
 extern uint32_t gps_baudrate;
+extern uint32_t comm_baudrate;
 
 extern uint32_t ppb_lock_threshold; 
 
 void menu_set_current_menu(uint8_t current_menu);
 void menu_set_gps_baudrate(uint32_t baudrate);
+void menu_set_comm_baudrate(uint32_t baudrate);
+bool settings_is_valid_baudrate(uint32_t baudrate);
 void menu_set_correction_algorithm(correction_algo_type algo);
 bool rotary_get_click();
 void menu_run();
