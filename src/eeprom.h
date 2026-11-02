@@ -34,4 +34,7 @@ typedef struct
 
 extern ee_storage_t ee_storage;
 
+// True if ee_storage is identical to what is saved in flash
+bool eeprom_matches_flash(void);
+
 #endif

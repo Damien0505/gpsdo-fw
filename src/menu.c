@@ -17,9 +17,6 @@
 #define DEBOUNCE_TIME           50
 #define BOOT_MENU_SAVE_TIME     3*1000
 
-// Firmware version tag
-#define FIRMWARE_VERSION        "v0.1.16"
-
 volatile uint32_t rotary_down_time      = 0;
 volatile uint32_t rotary_up_time        = 0;
 volatile bool     rotary_press_detected = 0;
@@ -241,6 +238,21 @@ bool settings_is_valid_baudrate(uint32_t baudrate)
 bool settings_is_valid_gps_baudrate(uint32_t baudrate)
 {
     return settings_is_valid_baudrate(baudrate) && (gps_model != GPS_MODEL_ATGM336H || baudrate <= 115200);
+}
+
+// Same screens as the automatic boot screen selection in menu_run()
+bool settings_is_valid_boot_menu(uint32_t screen)
+{
+    switch (screen)
+    {
+        case SCREEN_MAIN:
+        case SCREEN_DATE:
+        case SCREEN_DATE_TIME:
+        case SCREEN_TREND:
+            return true;
+        default:
+            return false;
+    }
 }
 
 void menu_set_correction_algorithm(correction_algo_type algo)

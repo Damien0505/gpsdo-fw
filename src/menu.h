@@ -4,6 +4,9 @@
 #include <stdbool.h>
 #include "int.h"
 
+// Firmware version tag
+#define FIRMWARE_VERSION        "v0.1.16-web1"
+
 // Char code for sat icons
 #define SAT_ICON_1_CODE         '-'//0x7F
 #define SAT_ICON_2_CODE         '='//'-'
@@ -38,6 +41,7 @@ void menu_set_gps_baudrate(uint32_t baudrate);
 void menu_set_comm_baudrate(uint32_t baudrate);
 bool settings_is_valid_baudrate(uint32_t baudrate);
 bool settings_is_valid_gps_baudrate(uint32_t baudrate);
+bool settings_is_valid_boot_menu(uint32_t screen);
 
 // Setters shared by the encoder menus and the serial protocol.
 // They update the live value and ee_storage, and return true if ee_storage changed:
