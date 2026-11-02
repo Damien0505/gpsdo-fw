@@ -1,0 +1,5 @@
+.pio/
+data/
+*.exe
+*.pdb
+__pycache__/
