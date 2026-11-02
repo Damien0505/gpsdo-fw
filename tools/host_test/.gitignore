@@ -1,0 +1,4 @@
+*.exe
+test_comm
+stubs/*
+!stubs/hal_stub.h

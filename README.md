@@ -64,6 +64,7 @@ Here is the menu tree :
   - `Sat. #`: the numner of satellites
   - `HDOP`: the current Horizontal Dilution Of Precision value
   - `Baudrate`(__*don't mess with this unless you know what you are doing !*__): set the GPS UART communication baudrate (for GPSDO equipped with ATGM336H GPS modules, changing this will also send a command to change the GPS module baudrate accordingly *BUT* ATGM336H modules installed in the GPSDO have been reported to have a weak battery and don't retain this setting for a very long time... passed this time the module will return to default 9600 bauds, breaking the communication with the bluepill (see [Troubleshooting section](https://github.com/fredzo/gpsdo-fw/blob/main/README.md#no-time-on-the-display)))
+  - `Comm`: set the baudrate of the external serial link on PA2/PA3, taking effect at next boot (see [GPS UART Passthrough](#gps-uart-passthrough)). It defaults to 115200, whatever the GPS baudrate
   - `Time Zone offset`: set the number of hours (-14/+14) to shift the displayed time from UTC to match local time
   - `Date Format`: set the date format (either `dd/mm/yy` (default value), `mm/dd/yy`, `yy/mm/dd`, `dd.mm.yy` or `yy-mm-dd`)
   - `Model`: displays the detected GPS module model, press to manually set the GPS module model
@@ -182,6 +183,8 @@ The dedicated `PPS` menu allows monitoring the deviation between the MCU control
 #### GPS UART Passthrough
 
 A GPS UART passthrough has been added on UART2: pins PA2 (TX) and PA3 (RX) can be used to communicate with the GPS module. This is bidirectional, so the GPS can be used by a computer or configured via manufacturer software.
+
+This link now has its own baudrate, 115200 by default, set in the `GPS > Comm` menu: use this for your serial adapter, and not the GPS baudrate. For heavy traffic such as u-center, set it to the same value as the GPS baudrate and reboot. It also carries monitoring and control sentences, see [the protocol](doc/PROTOCOL.md).
 
 ![GPS Passthrough](https://github.com/fredzo/gpsdo-fw/blob/main/doc/gps-passthrough.jpg?raw=true)
 
