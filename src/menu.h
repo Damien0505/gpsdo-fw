@@ -37,6 +37,18 @@ void menu_set_current_menu(uint8_t current_menu);
 void menu_set_gps_baudrate(uint32_t baudrate);
 void menu_set_comm_baudrate(uint32_t baudrate);
 bool settings_is_valid_baudrate(uint32_t baudrate);
+bool settings_is_valid_gps_baudrate(uint32_t baudrate);
+
+// Setters shared by the encoder menus and the serial protocol.
+// They update the live value and ee_storage, and return true if ee_storage changed:
+// persisting it (and when) is left to the caller.
+bool settings_set_contrast(int8_t value);
+bool settings_set_ocxo_model(ocxo_model_type model);
+bool settings_set_correction_algorithm(correction_algo_type algo);
+bool settings_set_gps_baudrate(uint32_t baudrate);
+bool settings_set_comm_baudrate(uint32_t baudrate);
+bool settings_set_trend_v_scale(uint32_t scale);
+bool settings_set_trend_h_scale(uint32_t scale);
 void menu_set_correction_algorithm(correction_algo_type algo);
 bool rotary_get_click();
 void menu_run();

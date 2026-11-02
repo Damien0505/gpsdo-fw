@@ -237,6 +237,12 @@ bool settings_is_valid_baudrate(uint32_t baudrate)
     return baudrate == menu_get_baudrate_value(menu_get_baudrate_enum(baudrate));
 }
 
+// Same limit as the encoder: ATGM336H modules can't go above 115200
+bool settings_is_valid_gps_baudrate(uint32_t baudrate)
+{
+    return settings_is_valid_baudrate(baudrate) && (gps_model != GPS_MODEL_ATGM336H || baudrate <= 115200);
+}
+
 void menu_set_correction_algorithm(correction_algo_type algo)
 {
     displayed_correction_algorithm = algo;
@@ -366,6 +372,99 @@ static uint32_t menu_roud_h_scale(uint32_t scale)
         }
     }
     return rounded_scale;
+}
+
+bool settings_set_contrast(int8_t value)
+{
+    contrast = value;
+    update_contrast();
+    if(ee_storage.contrast != contrast)
+    {   // Contrast has changed
+        ee_storage.contrast = contrast;
+        return true;
+    }
+    return false;
+}
+
+bool settings_set_ocxo_model(ocxo_model_type model)
+{
+    ocxo_model = model;
+    if(ee_storage.ocxo_model != ocxo_model)
+    {
+        ee_storage.ocxo_model = ocxo_model;
+        // Also change warmup time accordingly
+        warmup_time_seconds = get_default_warmup_time(ocxo_model);
+        ee_storage.warmup_time_seconds = warmup_time_seconds;
+        return true;
+    }
+    return false;
+}
+
+bool settings_set_correction_algorithm(correction_algo_type algo)
+{
+    displayed_correction_algorithm = algo;
+    if(ee_storage.correction_algorithm != displayed_correction_algorithm)
+    {   // Make sure correction algo and correction are consistant before activating new algo
+        // Reset correction factor to default value when algo is changed
+        correction_factor = get_default_correction_factor(displayed_correction_algorithm);
+        correction_algorithm = displayed_correction_algorithm;
+        ee_storage.correction_algorithm = correction_algorithm;
+        ee_storage.correction_factor = correction_factor;
+        return true;
+    }
+    return false;
+}
+
+bool settings_set_gps_baudrate(uint32_t baudrate)
+{
+    gps_baudrate = baudrate;
+    gps_baudrate_enum = menu_get_baudrate_enum(baudrate);
+    if(ee_storage.gps_baudrate != gps_baudrate)
+    {
+        ee_storage.gps_baudrate = gps_baudrate;
+        // Reconfigure uart
+        if(gps_configure_module_uart(gps_baudrate)>=0)
+        {   // Reconfigure uart
+            gps_reconfigure_uart(gps_baudrate);
+            // Save new baudrate on gps module
+            gps_save_config();
+        }
+        return true;
+    }
+    return false;
+}
+
+bool settings_set_comm_baudrate(uint32_t baudrate)
+{
+    menu_set_comm_baudrate(baudrate);
+    if(ee_storage.comm_baudrate != comm_baudrate)
+    {
+        ee_storage.comm_baudrate = comm_baudrate;
+        return true;
+    }
+    return false;
+}
+
+bool settings_set_trend_v_scale(uint32_t scale)
+{
+    trend_v_scale = menu_round_v_scale(scale);
+    if(ee_storage.trend_v_scale != trend_v_scale)
+    {
+        ee_storage.trend_v_scale = trend_v_scale;
+        return true;
+    }
+    return false;
+}
+
+bool settings_set_trend_h_scale(uint32_t scale)
+{
+    trend_h_scale = menu_roud_h_scale(scale);
+    if(ee_storage.trend_h_scale != trend_h_scale)
+    {
+        ee_storage.trend_h_scale = trend_h_scale;
+        return true;
+    }
+    return false;
 }
 
 static void menu_draw_trend(uint32_t shift)
@@ -1290,9 +1389,8 @@ void menu_run()
                     menu_level = 0;
                     break;
                 case SCREEN_CONTRAST:
-                    if(ee_storage.contrast != contrast)
+                    if(settings_set_contrast(contrast))
                     {   // Contrast has changed => save it to eeprom
-                        ee_storage.contrast = contrast;
                         EE_Write();
                     }
                     menu_level = 0;
@@ -1403,12 +1501,8 @@ void menu_run()
             switch(current_menu_ppb_screen)
             {
                 case SCREEN_PPB_OCXO_MODEL:
-                    if(ee_storage.ocxo_model != ocxo_model)
+                    if(settings_set_ocxo_model(ocxo_model))
                     {   // Save changes
-                        ee_storage.ocxo_model = ocxo_model;
-                        // Alsa change warmup time accordingly
-                        warmup_time_seconds = get_default_warmup_time(ocxo_model);
-                        ee_storage.warmup_time_seconds = warmup_time_seconds;
                         EE_Write();
                     }
                     break;
@@ -1420,14 +1514,8 @@ void menu_run()
                     }
                     break;
                 case SCREEN_PPB_ALGO:
-                    if(ee_storage.correction_algorithm != displayed_correction_algorithm)
-                    {   // Make sure correction algo and correction are consistant before activating new algo
-                        // Reset correction factor to default value when algo is changed
-                        correction_factor = get_default_correction_factor(displayed_correction_algorithm);
-                        correction_algorithm = displayed_correction_algorithm;
-                        // Save changes
-                        ee_storage.correction_algorithm = correction_algorithm;
-                        ee_storage.correction_factor = correction_factor;
+                    if(settings_set_correction_algorithm(displayed_correction_algorithm))
+                    {   // Save changes
                         EE_Write();
                     }
                     break;
@@ -1468,23 +1556,14 @@ void menu_run()
             switch(current_menu_gps_screen)
             {
                 case SCREEN_GPS_BAUDRATE:
-                    if(ee_storage.gps_baudrate != gps_baudrate)
+                    if(settings_set_gps_baudrate(gps_baudrate))
                     {   // Save changes
-                        ee_storage.gps_baudrate = gps_baudrate;
                         EE_Write();
-                        // Reconfigure uart
-                        if(gps_configure_module_uart(gps_baudrate)>=0)
-                        {   // Reconfigure uart
-                            gps_reconfigure_uart(gps_baudrate);
-                            // Save new baudrate on gps module
-                            gps_save_config();
-                        }
                     }
                     break;
                 case SCREEN_GPS_COMM_BAUDRATE:
-                    if(ee_storage.comm_baudrate != comm_baudrate)
+                    if(settings_set_comm_baudrate(comm_baudrate))
                     {   // Save changes
-                        ee_storage.comm_baudrate = comm_baudrate;
                         EE_Write();
                     }
                     break;
