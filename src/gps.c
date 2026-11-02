@@ -90,9 +90,12 @@ bool fifo_read(volatile fifo_buffer_t* fifo, uint8_t* c)
 
 volatile uint8_t gps_it_buf[GPS_RX_BUFFER_SIZE];
 volatile uint8_t comm_it_buf[COMM_RX_BUFFER_SIZE];
+// Bytes of gps_it_buf already copied to the FIFO
+volatile size_t  gps_it_position = 0;
 
 static void gps_start_gps_rx()
 {
+    gps_it_position = 0;
     if (HAL_UART_Receive_DMA(&huart3, (uint8_t*)gps_it_buf, GPS_RX_BUFFER_SIZE) != HAL_OK) {
         Error_Handler();
     }
@@ -232,7 +235,7 @@ void gps_save_config()
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart)
 {
     if (huart == &huart3) {
-        for (size_t i = 0; i < GPS_RX_BUFFER_SIZE; i++) {
+        for (size_t i = gps_it_position; i < GPS_RX_BUFFER_SIZE; i++) {
             fifo_write(&fifo_buffer_gps, gps_it_buf[i]);
         }
         gps_start_gps_rx();
@@ -642,8 +645,22 @@ void gps_comm_rx_check()
     }
 }
 
+// The DMA only interrupts when its buffer is full, which would leave the end of each GPS burst waiting
+// for the next burst, one second later. Taking what has been received so far gets whole lines on time.
+static void gps_collect_partial_rx()
+{
+    __disable_irq();
+    size_t received = GPS_RX_BUFFER_SIZE - __HAL_DMA_GET_COUNTER(huart3.hdmarx);
+    while (gps_it_position < received) {
+        fifo_write(&fifo_buffer_gps, gps_it_buf[gps_it_position]);
+        gps_it_position = gps_it_position + 1;
+    }
+    __enable_irq();
+}
+
 void gps_read()
 {
+    gps_collect_partial_rx();
     uint8_t c;
     size_t  received = 0;
     while (fifo_read(&fifo_buffer_gps, &c)) {
