@@ -35,6 +35,7 @@ add_executable(${CMAKE_PROJECT_NAME})
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     src/main.c
+    src/comm.c
     src/eeprom.c
     src/frequency.c
     src/gps.c

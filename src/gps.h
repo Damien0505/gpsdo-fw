@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #define GPS_DEFAULT_BAUDRATE    9600
 // Default baudrate of the external serial link (USART2), independent from the GPS module one
@@ -38,6 +39,17 @@ extern uint32_t last_frame_receive_time;
 void gps_start_it();
 void gps_parse(char* line);
 void gps_read();
+
+// Time of the last byte received from the GPS
+extern uint32_t gps_last_byte_time;
+// GPS bytes waiting to be forwarded to the external link
+size_t gps_forward_available();
+// Copies bytes waiting to be forwarded, stopping after the first end of line. Returns the count.
+size_t gps_forward_read(uint8_t* dest, size_t max);
+// Reads a byte received from the external link
+bool gps_comm_read(uint8_t* c);
+// Restarts reception on the external link if a UART error stopped it
+void gps_comm_rx_check();
 
 int	 gps_configure_module_uart(uint32_t baudrate);
 void gps_reconfigure_uart(uint32_t baudrate);

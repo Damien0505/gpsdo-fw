@@ -4,6 +4,7 @@
 #include "stm32f1xx_hal_uart.h"
 #include "usart.h"
 #include "eeprom.h"
+#include "comm.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -605,48 +606,68 @@ void gps_parse(char* line)
     last_frame_receive_time = HAL_GetTick();
 }
 
-#define	SEND_BUFFER_SIZE	FIFO_BUFFER_SIZE
-uint8_t send_buf[SEND_BUFFER_SIZE];
-uint8_t gps_send_buf[SEND_BUFFER_SIZE];
-uint8_t comm_send_buf[SEND_BUFFER_SIZE];
-size_t  send_size;
+// Forwarding to the external link reads the GPS FIFO with its own position, behind the parser, so
+// that parsing never depends on the link: if the link can't keep up, only forwarded bytes are lost.
+static size_t gps_forward_position = 0;
+static size_t gps_forward_pending  = 0;
+
+uint32_t gps_last_byte_time = 0;
+
+size_t gps_forward_available() { return gps_forward_pending; }
+
+size_t gps_forward_read(uint8_t* dest, size_t max)
+{
+    size_t count = 0;
+    while (count < max && gps_forward_pending > 0) {
+        uint8_t c = fifo_buffer_gps.buffer[gps_forward_position];
+        gps_forward_position = (gps_forward_position + 1) % FIFO_BUFFER_SIZE;
+        gps_forward_pending--;
+        dest[count++] = c;
+        if (c == '\n') {
+            break;
+        }
+    }
+    return count;
+}
+
+bool gps_comm_read(uint8_t* c) { return fifo_read(&fifo_buffer_comm, c); }
+
+void gps_comm_rx_check()
+{
+    // With DMA reception, the HAL stops reception on any UART error (framing, overrun...).
+    // RX completion restarts it from the interrupt, so ready here means it was stopped.
+    if (huart2.RxState == HAL_UART_STATE_READY) {
+        // Not gps_start_comm_rx(): an error here is retried on next call rather than a reset
+        HAL_UART_Receive_DMA(&huart2, (uint8_t*)comm_it_buf, COMM_RX_BUFFER_SIZE);
+    }
+}
 
 void gps_read()
 {
-    send_size = 0;
     uint8_t c;
+    size_t  received = 0;
     while (fifo_read(&fifo_buffer_gps, &c)) {
+        received++;
+        if (gps_line_len >= (MAX_GPS_LINE - 1)) {
+            // Line too long, drop it
+            gps_line_len = 0;
+        }
         gps_line[gps_line_len++] = c;
-        send_buf[send_size++]    = c;
         if (c == '\n') {
             gps_line[gps_line_len] = '\0';
             gps_parse(gps_line);
             gps_line_len = 0;
-            continue;
-        }
-        if (gps_line_len >= MAX_GPS_LINE) {
-            gps_line_len = 0;
-            return;
         }
     }
-
-    if (send_size) {
-        while (huart2.gState != HAL_UART_STATE_READY)
-            ;
-        memcpy(gps_send_buf, send_buf, SEND_BUFFER_SIZE);
-        HAL_UART_Transmit_IT(&huart2, gps_send_buf, send_size);
+    if (received > 0) {
+        gps_last_byte_time = HAL_GetTick();
+        gps_forward_pending += received;
+        if (gps_forward_pending >= FIFO_BUFFER_SIZE) {
+            // Link too slow: the oldest bytes have been overwritten, skip them
+            size_t skipped = gps_forward_pending - (FIFO_BUFFER_SIZE - 1);
+            gps_forward_position = (gps_forward_position + skipped) % FIFO_BUFFER_SIZE;
+            gps_forward_pending -= skipped;
+        }
     }
-
-    send_size = 0;
-    while (fifo_read(&fifo_buffer_comm, &c)) {
-        send_buf[send_size++] = c;
-    }
-    
-    if (send_size) {
-        while (huart3.gState != HAL_UART_STATE_READY)
-            ;
-        memcpy(comm_send_buf, send_buf, SEND_BUFFER_SIZE);
-        HAL_UART_Transmit_IT(&huart3, comm_send_buf, send_size);
-    }
-    
+    comm_task();
 }

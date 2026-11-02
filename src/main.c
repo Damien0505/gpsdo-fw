@@ -1,5 +1,6 @@
 #include "main.h"
 #include "LCD.h"
+#include "comm.h"
 #include "eeprom.h"
 #include "frequency.h"
 #include "gps.h"
@@ -158,6 +159,8 @@ void gpsdo(void)
 
     HAL_TIM_Base_Start(&htim3);
     HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
+
+    comm_init();
 
     bool vco_adjust_allowed = false;
 
