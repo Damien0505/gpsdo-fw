@@ -1,3 +1,14 @@
+## About this fork
+
+This fork of [fredzo/gpsdo-fw](https://github.com/fredzo/gpsdo-fw), itself based on [dankar/gpsdo-fw](https://github.com/dankar/gpsdo-fw), adds a browser interface. An ESP32-C3 connected to the GPSDO's PA2/PA3 serial link shows live readings, the PPB trend and GPS details, and gives access to every menu setting. The LCD and encoder keep working as before.
+
+It needs two pieces of firmware, both in this fork's [releases](https://github.com/Damien0505/gpsdo-fw/releases):
+
+- **GPSDO:** flash `gpsdo-v0.1.16-web1.bin` as described in [Flashing the firmware](#flashing-the-firmware), instead of the `gpsdo.bin` from fredzo's releases.
+- **ESP32-C3:** see [esp32-web](esp32-web/README.md) for the wiring and setup.
+
+The serial protocol between them is described in [doc/PROTOCOL.md](doc/PROTOCOL.md). Use the web interface on a trusted network only. Everything below comes from the original README, apart from the additions to the GPS passthrough section.
+
 ## Alternative firmware for the BH3SAP GPSDO
 
 This is an alternative firmware for the BH3SAP GPSDO sold on various platforms.
