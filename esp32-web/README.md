@@ -44,8 +44,8 @@ Holding the BOOT button for 5 s erases the settings, in case the password is los
 
 The onboard LED is solid when everything works, blinks slowly without a link to the GPSDO, and quickly without WiFi.
 
-If the board has trouble joining WiFi, some C3 Super Mini boards are reported to work better at lower transmit power:
-add `-DWIFI_TX_POWER=WIFI_POWER_8_5dBm` to `build_flags`.
+Transmit power is limited to 8.5 dBm, for both the setup network and your WiFi, because some C3 Super Mini boards
+are reported to be unreliable at full power. To change it, edit `WIFI_TX_POWER` under `build_flags`.
 
 ## HTTP API
 
