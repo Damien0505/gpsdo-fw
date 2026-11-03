@@ -489,6 +489,30 @@ void begin(Gpsdo& gpsdo_ref, DeviceSettings& settings_ref)
         response->addHeader("Cache-Control", "no-store");
         request->send(response);
     });
+    server.on("/api/gpsquery", HTTP_GET, [](AsyncWebServerRequest* request) {
+        std::string json;
+        {
+            Guard guard;
+            json = gpsQueryJson(*gpsdo);
+        }
+        AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json.c_str());
+        response->addHeader("Cache-Control", "no-store");
+        request->send(response);
+    });
+    // Opened by hand in a browser, for the password dialog. Only reads settings from the GPS module.
+    server.on("/gpsquery", HTTP_GET, [](AsyncWebServerRequest* request) {
+        if (!requireAdmin(request)) {
+            return;
+        }
+        {
+            Guard guard;
+            gpsdo->startGpsQuery(millis());
+        }
+        AsyncWebServerResponse* response =
+            request->beginResponse(200, "text/plain", "GPS module query started. Results: /api/gpsquery\n");
+        response->addHeader("Cache-Control", "no-store");
+        request->send(response);
+    });
     server.on("/metrics", HTTP_GET, [](AsyncWebServerRequest* request) {
         std::string text;
         {

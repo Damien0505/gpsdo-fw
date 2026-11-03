@@ -28,6 +28,7 @@ std::string statusJson(const Gpsdo& gpsdo, const HostInfo& host, uint32_t now)
     link["bad_checksums"] = gpsdo.badChecksums();
     link["lines"] = gpsdo.linesReceived();
     link["down_events"] = gpsdo.linkDownEvents();
+    link["glitches"] = gpsdo.measurementGlitches();
 
     const Telemetry& t = gpsdo.telemetry();
     if (t.valid) {
@@ -127,6 +128,30 @@ std::string configJson(const Gpsdo& gpsdo)
     return out;
 }
 
+std::string gpsQueryJson(const Gpsdo& gpsdo)
+{
+    const GpsQuery& query = gpsdo.gpsQuery();
+    JsonDocument doc;
+    doc["state"] = query.running() ? "running" : (query.finished() ? "done" : "idle");
+    doc["sent"] = query.stepsSent();
+    doc["steps"] = GpsQuery::stepCount();
+    JsonArray texts = doc["texts"].to<JsonArray>();
+    for (const std::string& text : query.texts()) {
+        texts.add(text);
+    }
+    JsonArray frames = doc["frames"].to<JsonArray>();
+    for (const GpsQuery::Frame& frame : query.frames()) {
+        JsonObject row = frames.add<JsonObject>();
+        row["class"] = frame.cls;
+        row["id"] = frame.id;
+        row["payload"] = frame.payload_hex;
+        row["checksum_ok"] = frame.checksum_ok;
+    }
+    std::string out;
+    serializeJson(doc, out);
+    return out;
+}
+
 static void metric(std::string& out, const char* name, const char* help, double value)
 {
     char line[192];
@@ -139,6 +164,7 @@ std::string metricsText(const Gpsdo& gpsdo, const HostInfo& host, uint32_t now)
     std::string out;
     metric(out, "gpsdo_link_up", "Telemetry received from the GPSDO in the last 5 s", gpsdo.linkUp(now) ? 1 : 0);
     metric(out, "gpsdo_link_bad_checksums", "Sentences discarded since the ESP32 started", gpsdo.badChecksums());
+    metric(out, "gpsdo_measurement_glitches", "Frequency readings held back since the ESP32 started", gpsdo.measurementGlitches());
     const Telemetry& t = gpsdo.telemetry();
     if (t.valid && gpsdo.linkUp(now)) {
         metric(out, "gpsdo_uptime_seconds", "GPSDO uptime", t.uptime);

@@ -17,4 +17,5 @@ struct HostInfo {
 
 std::string statusJson(const Gpsdo& gpsdo, const HostInfo& host, uint32_t now);
 std::string configJson(const Gpsdo& gpsdo);
+std::string gpsQueryJson(const Gpsdo& gpsdo);
 std::string metricsText(const Gpsdo& gpsdo, const HostInfo& host, uint32_t now);

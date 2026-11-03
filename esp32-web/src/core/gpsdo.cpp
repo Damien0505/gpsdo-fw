@@ -14,6 +14,12 @@ constexpr uint32_t HISTORY_GAP_MS = 1500;
 constexpr uint32_t CONFIG_RETRY_MS = 5000;
 constexpr uint32_t EXPIRE_PERIOD_MS = 1000;
 const char PREFIX[] = "PGPSDO,";
+constexpr int32_t NOMINAL_HZ = 70000000;
+// Same limit as frequency_get_error() in the firmware. A flash write stops the CPU and loses timer overflows, so
+// a reading is off by multiples of 65536 for a second. The firmware's control loop ignores those readings.
+constexpr int32_t GLITCH_HZ = 2000;
+// More in a row than this is not a glitch, and has to be seen
+constexpr int MAX_GLITCH_RUN = 3;
 
 int hexDigit(char c)
 {
@@ -137,6 +143,9 @@ void Gpsdo::onBytes(const uint8_t* data, size_t len, uint32_t now)
 {
     for (size_t i = 0; i < len; i++) {
         char c = (char)data[i];
+        if (gps_query_.running()) {
+            gps_query_.onByte(data[i]);
+        }
         if (c == '\n') {
             if (line_overflow_) {
                 bad_checksums_++;
@@ -177,6 +186,9 @@ void Gpsdo::onLine(const char* line, uint32_t now)
         onSentence(body, now);
     } else {
         gps_.parse(line, now);
+        if (gps_query_.running()) {
+            gps_query_.onText(line);
+        }
     }
 }
 
@@ -214,6 +226,15 @@ void Gpsdo::onTlm(char** f, int count, uint32_t now)
         }
     }
     bool rebooted = tlm_.valid && (uint32_t)v[0] < tlm_.uptime;
+    int32_t freq = (int32_t)v[6];
+    bool glitch = tlm_.valid && freq != 0 && std::abs(freq - NOMINAL_HZ) > GLITCH_HZ;
+    if (glitch) {
+        glitches_++;
+        glitch_run_++;
+    } else {
+        glitch_run_ = 0;
+    }
+    bool keep_last = glitch && glitch_run_ <= MAX_GLITCH_RUN;
     tlm_.valid = true;
     tlm_.uptime = (uint32_t)v[0];
     tlm_.gps_lock = v[1] != 0;
@@ -221,13 +242,17 @@ void Gpsdo::onTlm(char** f, int count, uint32_t now)
     tlm_.sats = (int32_t)v[3];
     tlm_.ppb_mean = (int32_t)v[4];
     tlm_.ppb_inst = (int32_t)v[5];
-    tlm_.freq = (int32_t)v[6];
+    if (!keep_last) {
+        tlm_.freq = freq;
+    }
     tlm_.error = (int32_t)v[7];
     tlm_.correction = (int32_t)v[8];
     tlm_.pwm = (uint32_t)v[9];
     tlm_.millis = (int32_t)v[10];
-    tlm_.pps_shift = (int32_t)v[11];
-    tlm_.pps_shift_ms = (int32_t)v[12];
+    if (!keep_last) {
+        tlm_.pps_shift = (int32_t)v[11];
+        tlm_.pps_shift_ms = (int32_t)v[12];
+    }
     tlm_.pps_sync_count = (uint32_t)v[13];
     tlm_.adjusting = v[14] != 0;
 
@@ -240,6 +265,7 @@ void Gpsdo::onTlm(char** f, int count, uint32_t now)
         // Settings may have been changed since, or the unit swapped
         config_complete_ = false;
         requestConfig(now);
+        enqueue("GET", "VER", "", now);
     }
 }
 
@@ -394,6 +420,10 @@ void Gpsdo::tick(uint32_t now)
     if (up && !was_up_ && !config_complete_) {
         requestConfig(now);
     }
+    // The question asked at start may have gone out before the GPSDO was listening
+    if (up && !was_up_ && protocol_ == 0) {
+        enqueue("GET", "VER", "", now);
+    }
     was_up_ = up;
 
     // No answer to a config request while the link is up: keep trying
@@ -406,6 +436,8 @@ void Gpsdo::tick(uint32_t now)
         history_.addGap();
         last_history_ += HISTORY_STEP_MS;
     }
+
+    gps_query_.tick(now, transmit_);
 
     if ((now - last_expire_) >= EXPIRE_PERIOD_MS) {
         last_expire_ = now;

@@ -59,6 +59,8 @@ are reported to be unreliable at full power. To change it, edit `WIFI_TX_POWER` 
 | GET | `/api/console` | | The last 200 lines of the serial link. `> ` marks what was sent to the GPSDO. |
 | WS | `/ws` | | The status every second, and the settings when they change. Messages have a `type`. |
 | GET | `/metrics` | | Prometheus |
+| GET | `/gpsquery` | admin | Opened in a browser: reads the GPS module's settings, which takes about 15 s. Changes nothing. |
+| GET | `/api/gpsquery` | | The results: `$GPTXT` answers, and raw payloads of its `CFG` messages |
 
 POST requests need `Content-Type: application/json`, and answer once the GPSDO has replied, 4 s at most:
 
@@ -70,6 +72,10 @@ POST requests need `Content-Type: application/json`, and answer once the GPSDO h
 A setting applied is saved by the GPSDO within 13 s, see [Saving](../doc/PROTOCOL.md#saving).
 
 History is kept in RAM, and restarts when the ESP32 restarts.
+
+A flash write on the GPSDO stops its CPU for about 20 ms, which puts one frequency reading out by multiples of 65536 Hz.
+The GPSDO's control loop ignores those readings. Here, the last good frequency and PPS shift stay in place instead, up
+to three readings in a row, and `glitches` in the status counts them.
 
 ## Working without the hardware
 

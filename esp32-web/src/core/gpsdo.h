@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "gps_query.h"
 #include "history.h"
 #include "nmea.h"
 
@@ -103,6 +104,11 @@ public:
     uint32_t badChecksums() const { return bad_checksums_; }
     uint32_t linesReceived() const { return lines_; }
     uint32_t linkDownEvents() const { return link_downs_; }
+    uint32_t measurementGlitches() const { return glitches_; }
+
+    // Reads the GPS module's settings, see gps_query.h
+    void startGpsQuery(uint32_t now) { gps_query_.start(now); }
+    const GpsQuery& gpsQuery() const { return gps_query_; }
 
     // True once when a complete CFG report arrived since the last call
     bool takeConfigChanged();
@@ -133,6 +139,7 @@ private:
     ConfigMap config_;
     History   history_;
     Console   console_;
+    GpsQuery  gps_query_;
 
     std::string firmware_;
     int       protocol_ = 0;
@@ -146,6 +153,8 @@ private:
     uint32_t  bad_checksums_ = 0;
     uint32_t  lines_ = 0;
     uint32_t  link_downs_ = 0;
+    uint32_t  glitches_ = 0;
+    int       glitch_run_ = 0;
 
     bool      tlm_seen_ = false;
     uint32_t  last_tlm_ = 0;

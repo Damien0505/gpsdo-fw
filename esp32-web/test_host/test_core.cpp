@@ -216,6 +216,7 @@ static void test_boot_conversation()
     // Also on its boot announcement
     r.line("PGPSDO,ACK,GET,CFG,OK");
     r.line("PGPSDO,CFG,fw_version=v1");
+    r.line("PGPSDO,ACK,GET,VER,OK");
     r.sent.clear();
     r.line("PGPSDO,VER,1,v1");
     CHECK(!r.sent.empty());
@@ -553,6 +554,177 @@ static void test_reports()
     CHECK(metrics.find("gpsdo_esp_uptime_seconds 77\n") != std::string::npos);
 }
 
+static void test_version_asked_again_when_link_comes_up()
+{
+    Rig r;
+    r.gpsdo.tick(r.now);    // Asked at start, while the GPSDO isn't listening
+    r.advance(10000);
+    CHECK_EQ(r.gpsdo.protocolVersion(), 0);
+    r.sent.clear();
+    r.tlm();
+    r.gpsdo.tick(r.now);
+    bool asked = false;
+    for (int i = 0; i < 4 && !asked; i++) {
+        for (const std::string& s : r.sent) asked = asked || s.find("GET,VER") != std::string::npos;
+        if (!r.sent.empty()) {
+            std::string s = r.sent.front();
+            r.sent.erase(r.sent.begin());
+            if (s.find("GET,CFG") != std::string::npos) r.line("PGPSDO,ACK,GET,CFG,OK");
+            r.gpsdo.tick(r.now);
+        }
+    }
+    CHECK(asked);
+    r.feed("$PGPSDO,VER,1,v0.1.16-web1*5F\r\n");
+    CHECK_EQ(r.gpsdo.protocolVersion(), 1);
+}
+
+static std::string tlmWith(long long freq, long long shift)
+{
+    return "PGPSDO,TLM,100,1,1,9,3,-12," + std::to_string(freq) + ",0,0,38212,0," + std::to_string(shift) + ",7,4,1";
+}
+
+static void test_frequency_glitches()
+{
+    Rig r;
+    r.line(tlmWith(70000001, 500));
+    CHECK_EQ(r.gpsdo.telemetry().freq, 70000001);
+    // As measured on a real unit, during a flash write
+    r.line(tlmWith(68558207, -1404660));
+    CHECK_EQ(r.gpsdo.telemetry().freq, 70000001);
+    CHECK_EQ(r.gpsdo.telemetry().pps_shift, 500);
+    CHECK_EQ(r.gpsdo.measurementGlitches(), 1);
+    r.line(tlmWith(70000000, 600));
+    CHECK_EQ(r.gpsdo.telemetry().freq, 70000000);
+    CHECK_EQ(r.gpsdo.telemetry().pps_shift, 600);
+    // One overflow out, then back: both held
+    r.line(tlmWith(69934464, 700));
+    r.line(tlmWith(70065535, 800));
+    CHECK_EQ(r.gpsdo.telemetry().freq, 70000000);
+    CHECK_EQ(r.gpsdo.measurementGlitches(), 3);
+    // Normal drift is not a glitch, up to the firmware's limit
+    r.line(tlmWith(70002000, 900));
+    CHECK_EQ(r.gpsdo.telemetry().freq, 70002000);
+    // A real fault must not stay hidden
+    for (int i = 0; i < 3; i++) r.line(tlmWith(69000000, 1));
+    CHECK_EQ(r.gpsdo.telemetry().freq, 70002000);
+    r.line(tlmWith(69000000, 1));
+    CHECK_EQ(r.gpsdo.telemetry().freq, 69000000);
+    // Nothing to hold on to yet
+    Rig first;
+    first.line(tlmWith(69000000, 1));
+    CHECK_EQ(first.gpsdo.telemetry().freq, 69000000);
+    CHECK_EQ(first.gpsdo.measurementGlitches(), 0);
+}
+
+static std::string cfgFrame(uint8_t id, const std::vector<uint8_t>& payload, uint32_t extra = 0)
+{
+    uint32_t sum = (0x06u << 24) + ((uint32_t)id << 16) + (uint32_t)payload.size() + extra;
+    for (size_t i = 0; i + 4 <= payload.size(); i += 4) {
+        sum += (uint32_t)payload[i] | (uint32_t)payload[i + 1] << 8 | (uint32_t)payload[i + 2] << 16 | (uint32_t)payload[i + 3] << 24;
+    }
+    std::string f;
+    f += (char)0xBA; f += (char)0xCE;
+    f += (char)payload.size(); f += '\0';
+    f += (char)0x06; f += (char)id;
+    for (uint8_t b : payload) f += (char)b;
+    for (int s = 0; s < 32; s += 8) f += (char)(sum >> s);
+    return f;
+}
+
+static void test_gps_query()
+{
+    // From the specification: empty CFG message, checksum (class << 24) + (id << 16) + length
+    const char expected[] = "\xBA\xCE\x00\x00\x06\x03\x00\x00\x03\x06\r\n";
+    CHECK(GpsQuery::binaryQuery(0x06, 0x03) == std::string(expected, sizeof(expected) - 1));
+    // Examples given by the specification
+    CHECK_STR(GpsQuery::textQuery("PCAS03,1,1,1,1,1,1,0,1"), "$PCAS03,1,1,1,1,1,1,0,1*03\r\n");
+    CHECK_STR(GpsQuery::textQuery("PCAS00"), "$PCAS00*01\r\n");
+
+    Rig r;
+    r.ready();
+    r.sent.clear();
+    // Only reads: nothing goes out unless asked
+    r.advance(5000);
+    CHECK_EQ(r.sent.size(), 0);
+    CHECK(!r.gpsdo.gpsQuery().finished());
+
+    r.gpsdo.startGpsQuery(r.now);
+    r.advance(10);
+    CHECK_EQ(r.sent.size(), 1);
+    CHECK_STR(r.sent[0], "$PCAS06,0*1B\r\n");
+    r.gpsdo.startGpsQuery(r.now);   // A second request doesn't restart it
+    uint32_t bad_before = r.gpsdo.badChecksums();
+
+    r.line("GPTXT,01,01,02,SW=V5.1");
+    r.line("GPTXT,01,01,01,ANTENNA OK");
+    std::vector<uint8_t> tp = {0x40, 0x42, 0x0F, 0x00, 0x64, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0, 0, 0, 0};
+    r.feed(cfgFrame(0x03, tp));
+    // In pieces
+    std::string frame = cfgFrame(0x07, {1, 2, 3, 4, 5});
+    r.feed(frame.substr(0, 3));
+    r.feed(frame.substr(3));
+    r.feed(cfgFrame(0x06, {1, 2, 3, 4}, 1));    // Wrong checksum
+    r.feed("\r\n");
+
+    CHECK(r.gpsdo.gpsQuery().running());
+    r.advance(GpsQuery::STEP_MS * GpsQuery::stepCount() + GpsQuery::SETTLE_MS + 100);
+    CHECK(r.gpsdo.gpsQuery().finished());
+    CHECK(!r.gpsdo.gpsQuery().running());
+
+    // Every query was sent, once, and none could change the module's settings
+    int gps_queries = 0;
+    for (const std::string& s : r.sent) {
+        if (s.find("PGPSDO") != std::string::npos) continue;
+        gps_queries++;
+        if (s[0] == '$') {
+            CHECK(s.find("PCAS06,") != std::string::npos);
+        } else {
+            CHECK_EQ((uint8_t)s[2], 0);
+            CHECK_EQ((uint8_t)s[3], 0);
+            CHECK_EQ((uint8_t)s[4], 0x06);
+        }
+    }
+    CHECK_EQ(gps_queries, GpsQuery::stepCount());
+
+    const auto& frames = r.gpsdo.gpsQuery().frames();
+    CHECK_EQ(frames.size(), 3);
+    if (frames.size() == 3) {
+        CHECK_EQ(frames[0].id, 0x03);
+        CHECK(frames[0].checksum_ok);
+        CHECK_STR(frames[0].payload_hex, "40420F00640000000100000000000000");
+        CHECK_EQ(frames[1].id, 0x07);
+        CHECK(frames[1].checksum_ok);
+        CHECK_STR(frames[1].payload_hex, "0102030405");
+        CHECK(!frames[2].checksum_ok);
+    }
+    // The answers, without the sentence repeated every second
+    CHECK_EQ(r.gpsdo.gpsQuery().texts().size(), 1);
+
+    // Binary doesn't take the link down, and costs at most what it lands on
+    r.tlm(200);
+    CHECK_EQ(r.gpsdo.telemetry().uptime, 200);
+    CHECK(r.gpsdo.badChecksums() - bad_before <= 3);
+
+    JsonDocument doc;
+    CHECK(deserializeJson(doc, gpsQueryJson(r.gpsdo)) == DeserializationError::Ok);
+    CHECK_STR(doc["state"].as<std::string>(), "done");
+    CHECK_EQ(doc["frames"].size(), 3);
+    CHECK_STR(doc["frames"][0]["payload"].as<std::string>(), "40420F00640000000100000000000000");
+
+    // Nothing kept growing once finished
+    size_t count = r.gpsdo.gpsQuery().frames().size();
+    r.feed(cfgFrame(0x03, tp));
+    CHECK_EQ(r.gpsdo.gpsQuery().frames().size(), count);
+
+    // Oversized length is noise, not a frame that swallows the link
+    Rig noise;
+    noise.ready();
+    noise.gpsdo.startGpsQuery(noise.now);
+    noise.feed("\xBA\xCE\xFF\xFF");
+    noise.feed(cfgFrame(0x03, tp));
+    CHECK_EQ(noise.gpsdo.gpsQuery().frames().size(), 1);
+}
+
 static void test_console()
 {
     static Rig r;
@@ -633,6 +805,9 @@ int main(int argc, char** argv)
         { "history from link", test_history_from_link },
         { "reports", test_reports },
         { "console", test_console },
+        { "version asked again", test_version_asked_again_when_link_comes_up },
+        { "frequency glitches", test_frequency_glitches },
+        { "GPS module query", test_gps_query },
     };
     for (auto& t : tests) {
         int before = failures;
